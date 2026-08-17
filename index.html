@@ -59,6 +59,15 @@
     .main-content{flex:1;margin-left:260px;display:flex;flex-direction:column;min-height:100vh;min-height:100dvh}
     .topbar{background:#fff;border-bottom:1px solid var(--gray-200);padding:12px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:30}
     .topbar .date{font-size:13px;color:var(--gray-500)}
+    .topbar-user{position:relative}
+    .topbar-avatar{width:36px;height:36px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;cursor:pointer;transition:box-shadow .2s}
+    .topbar-avatar:hover,.topbar-avatar.open{box-shadow:0 0 0 3px rgba(59,130,246,.3)}
+    .topbar-user-menu{display:none;position:absolute;right:0;top:calc(100% + 8px);background:#fff;border:1px solid var(--gray-200);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.12);min-width:200px;padding:8px 0;z-index:40}
+    .topbar-user-menu.open{display:block}
+    .topbar-user-name{padding:10px 16px 8px;font-size:14px;font-weight:600;color:var(--gray-800);border-bottom:1px solid var(--gray-100);margin-bottom:4px}
+    .topbar-menu-item{display:block;width:100%;text-align:left;padding:10px 16px;border:none;background:none;font-size:14px;color:var(--gray-700);cursor:pointer;transition:background .15s}
+    .topbar-menu-item:hover,.topbar-menu-item:active{background:var(--gray-50)}
+    .topbar-logout{color:var(--danger);border-top:1px solid var(--gray-100);margin-top:4px}
     .page-content{padding:24px;flex:1;padding-bottom:100px}
     .mobile-menu-btn{display:none;background:none;border:none;padding:8px;font-size:24px;min-width:44px;min-height:44px}
 
@@ -590,7 +599,16 @@ function renderApp(user){
     '<button class="sidebar-update-btn" id="sidebar-update-btn" onclick="forceUpdate()">\u21BB Actualizar app</button>'+
     '</div></aside>'+
     '<div class="main-content">'+
-    '<header class="topbar"><button class="mobile-menu-btn" onclick="openSidebar()">\u2630</button><div class="date">'+today+'</div></header>'+
+    '<header class="topbar"><button class="mobile-menu-btn" onclick="openSidebar()">\u2630</button><div class="date">'+today+'</div>'+
+    '<div class="topbar-user">'+
+    '<div class="topbar-avatar">'+user.name.charAt(0).toUpperCase()+'</div>'+
+    '<div class="topbar-user-menu" id="topbar-user-menu">'+
+    '<div class="topbar-user-name">'+user.name+'</div>'+
+    '<button class="topbar-menu-item" onclick="openSalaryForm()">\uD83D\uDCB0 Sueldo</button>'+
+    '<button class="topbar-menu-item" onclick="openCreditCardForm()">\uD83D\uDCB3 Tarjetas</button>'+
+    '<button class="topbar-menu-item" onclick="forceUpdate()">\u21BB Actualizar app</button>'+
+    '<button class="topbar-menu-item topbar-logout" onclick="doLogout();render()">\uD83D\uDEAA Cerrar Sesi\u00f3n</button>'+
+    '</div></div></header>'+
     '<div class="page-content" id="page-content"></div>'+
     '<nav class="bottom-nav"><div class="bottom-nav-inner">'+
     '<button onclick="navigate(\'dashboard\')" class="'+(currentPage==="dashboard"?"active":"")+'"><span class="bnav-icon">\uD83C\uDFE0</span>Inicio</button>'+
@@ -608,6 +626,19 @@ function renderApp(user){
 function navigate(page){ currentPage=page; currentPeriod={month:new Date().getMonth()+1,year:new Date().getFullYear()}; render(); }
 function openSidebar(){document.getElementById("sidebar").classList.add("open");document.getElementById("sidebar-overlay").style.display="block";}
 function closeSidebar(){document.getElementById("sidebar").classList.remove("open");document.getElementById("sidebar-overlay").style.display="none";}
+
+document.addEventListener("click", function(e){
+  var avatar = document.querySelector(".topbar-avatar");
+  var menu = document.getElementById("topbar-user-menu");
+  if(!avatar || !menu) return;
+  if(e.target === avatar || avatar.contains(e.target)){
+    menu.classList.toggle("open");
+    avatar.classList.toggle("open");
+  } else {
+    menu.classList.remove("open");
+    avatar.classList.remove("open");
+  }
+});
 
 function renderPage(user){
   destroyCharts();
