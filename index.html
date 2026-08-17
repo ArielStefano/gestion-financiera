@@ -60,13 +60,13 @@
     .topbar{background:#fff;border-bottom:1px solid var(--gray-200);padding:12px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:30}
     .topbar .date{font-size:13px;color:var(--gray-500)}
     .topbar-user{position:relative}
-    .topbar-avatar{width:36px;height:36px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;cursor:pointer;transition:box-shadow .2s}
+    .topbar-avatar{width:36px;height:36px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;cursor:pointer;transition:box-shadow .2s;-webkit-tap-highlight-color:transparent}
     .topbar-avatar:hover,.topbar-avatar.open{box-shadow:0 0 0 3px rgba(59,130,246,.3)}
-    .topbar-user-menu{display:none;position:absolute;right:0;top:calc(100% + 8px);background:#fff;border:1px solid var(--gray-200);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.12);min-width:200px;padding:8px 0;z-index:40}
+    .topbar-user-menu{display:none;position:fixed;right:16px;top:56px;background:#fff;border:1px solid var(--gray-200);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.15);min-width:200px;padding:8px 0;z-index:999}
     .topbar-user-menu.open{display:block}
     .topbar-user-name{padding:10px 16px 8px;font-size:14px;font-weight:600;color:var(--gray-800);border-bottom:1px solid var(--gray-100);margin-bottom:4px}
-    .topbar-menu-item{display:block;width:100%;text-align:left;padding:10px 16px;border:none;background:none;font-size:14px;color:var(--gray-700);cursor:pointer;transition:background .15s}
-    .topbar-menu-item:hover,.topbar-menu-item:active{background:var(--gray-50)}
+    .topbar-menu-item{display:block;width:100%;text-align:left;padding:12px 16px;border:none;background:none;font-size:14px;color:var(--gray-700);cursor:pointer;-webkit-tap-highlight-color:transparent}
+    .topbar-menu-item:active{background:var(--gray-100)}
     .topbar-logout{color:var(--danger);border-top:1px solid var(--gray-100);margin-top:4px}
     .page-content{padding:24px;flex:1;padding-bottom:100px}
     .mobile-menu-btn{display:none;background:none;border:none;padding:8px;font-size:24px;min-width:44px;min-height:44px}
@@ -589,7 +589,7 @@ function renderApp(user){
   }
   document.getElementById("app").innerHTML =
     '<div class="app-layout">'+
-    '<div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()" style="display:none"></div>'+
+    '<div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar();closeTopbarMenu()" style="display:none"></div>'+
     '<aside class="sidebar" id="sidebar">'+
     '<div class="sidebar-header"><h2>\uD83D\uDCB0 FinanceApp</h2><p>Gesti\u00f3n Financiera</p></div>'+
     '<nav class="sidebar-nav">'+navHtml+'</nav>'+
@@ -604,10 +604,10 @@ function renderApp(user){
     '<div class="topbar-avatar">'+user.name.charAt(0).toUpperCase()+'</div>'+
     '<div class="topbar-user-menu" id="topbar-user-menu">'+
     '<div class="topbar-user-name">'+user.name+'</div>'+
-    '<button class="topbar-menu-item" onclick="openSalaryForm()">\uD83D\uDCB0 Sueldo</button>'+
-    '<button class="topbar-menu-item" onclick="openCreditCardForm()">\uD83D\uDCB3 Tarjetas</button>'+
-    '<button class="topbar-menu-item" onclick="forceUpdate()">\u21BB Actualizar app</button>'+
-    '<button class="topbar-menu-item topbar-logout" onclick="doLogout();render()">\uD83D\uDEAA Cerrar Sesi\u00f3n</button>'+
+    '<button class="topbar-menu-item" onclick="closeTopbarMenu();openSalaryForm()">\uD83D\uDCB0 Sueldo</button>'+
+    '<button class="topbar-menu-item" onclick="closeTopbarMenu();openCreditCardForm()">\uD83D\uDCB3 Tarjetas</button>'+
+    '<button class="topbar-menu-item" onclick="closeTopbarMenu();forceUpdate()">\u21BB Actualizar app</button>'+
+    '<button class="topbar-menu-item topbar-logout" onclick="closeTopbarMenu();doLogout();render()">\uD83D\uDEAA Cerrar Sesi\u00f3n</button>'+
     '</div></div></header>'+
     '<div class="page-content" id="page-content"></div>'+
     '<nav class="bottom-nav"><div class="bottom-nav-inner">'+
@@ -627,18 +627,33 @@ function navigate(page){ currentPage=page; currentPeriod={month:new Date().getMo
 function openSidebar(){document.getElementById("sidebar").classList.add("open");document.getElementById("sidebar-overlay").style.display="block";}
 function closeSidebar(){document.getElementById("sidebar").classList.remove("open");document.getElementById("sidebar-overlay").style.display="none";}
 
+var topbarMenuOpen = false;
+function toggleTopbarMenu(){
+  topbarMenuOpen = !topbarMenuOpen;
+  var menu = document.getElementById("topbar-user-menu");
+  var avatar = document.querySelector(".topbar-avatar");
+  if(menu) menu.classList.toggle("open", topbarMenuOpen);
+  if(avatar) avatar.classList.toggle("open", topbarMenuOpen);
+}
+function closeTopbarMenu(){
+  topbarMenuOpen = false;
+  var menu = document.getElementById("topbar-user-menu");
+  var avatar = document.querySelector(".topbar-avatar");
+  if(menu) menu.classList.remove("open");
+  if(avatar) avatar.classList.remove("open");
+}
+
 document.addEventListener("click", function(e){
   var avatar = document.querySelector(".topbar-avatar");
   var menu = document.getElementById("topbar-user-menu");
   if(!avatar || !menu) return;
   if(e.target === avatar || avatar.contains(e.target)){
-    menu.classList.toggle("open");
-    avatar.classList.toggle("open");
-  } else {
-    menu.classList.remove("open");
-    avatar.classList.remove("open");
+    e.stopPropagation();
+    toggleTopbarMenu();
+  } else if(menu.classList.contains("open")){
+    closeTopbarMenu();
   }
-});
+}, true);
 
 function renderPage(user){
   destroyCharts();
