@@ -587,7 +587,7 @@ function renderApp(user){
     '<div class="sidebar-footer">'+
     '<div class="user-info"><div class="avatar">'+user.name.charAt(0).toUpperCase()+'</div><div><div class="user-name">'+user.name+'</div><div class="user-email">'+user.email+'</div></div></div>'+
     '<button class="logout-btn" onclick="doLogout();render()">Cerrar Sesi\u00f3n</button>'+
-    '<button class="sidebar-update-btn" id="sidebar-update-btn" onclick="forceUpdate()" style="display:none">\u21BB Actualizar app</button>'+
+    '<button class="sidebar-update-btn" id="sidebar-update-btn" onclick="forceUpdate()">\u21BB Actualizar app</button>'+
     '</div></aside>'+
     '<div class="main-content">'+
     '<header class="topbar"><button class="mobile-menu-btn" onclick="openSidebar()">\u2630</button><div class="date">'+today+'</div></header>'+
@@ -1431,9 +1431,6 @@ function renderAnalysis(user){
 render();
 
 // ============ PWA ============
-if("serviceWorker" in navigator){
-  navigator.serviceWorker.register("service-worker.js").catch(function(){});
-}
 
 var deferredPrompt = null;
 window.addEventListener("beforeinstallprompt", function(e){
@@ -1463,36 +1460,55 @@ window.addEventListener("appinstalled", function(){ deferredPrompt=null; dismiss
 
 // ============ FORCE UPDATE ============
 var swUpdatePending = false;
+
 if("serviceWorker" in navigator){
-  navigator.serviceWorker.ready.then(function(reg){
+  navigator.serviceWorker.register("service-worker.js").then(function(reg){
     reg.addEventListener("updatefound", function(){
       var newSW = reg.installing;
       if(newSW){
         newSW.addEventListener("statechange", function(){
           if(newSW.state==="installed" && navigator.serviceWorker.controller){
             swUpdatePending = true;
-            var btn = document.getElementById("sidebar-update-btn");
-            if(btn) btn.style.display="block";
+            showUpdateBanner();
           }
         });
       }
     });
-  });
+    reg.update();
+  }).catch(function(){});
+
   navigator.serviceWorker.addEventListener("controllerchange", function(){
     if(swUpdatePending){
       swUpdatePending = false;
       window.location.reload();
     }
   });
+
+  setInterval(function(){
+    if(navigator.serviceWorker.controller){
+      navigator.serviceWorker.getRegistration().then(function(reg){
+        if(reg) reg.update();
+      });
+    }
+  }, 60000);
+}
+
+function showUpdateBanner(){
+  var existing = document.getElementById("update-float");
+  if(existing) return;
+  var btn = document.createElement("div");
+  btn.id = "update-float";
+  btn.style.cssText = "position:fixed;bottom:90px;right:16px;z-index:200;background:linear-gradient(135deg,#059669,#10b981);color:#fff;padding:12px 18px;border-radius:14px;box-shadow:0 6px 20px rgba(16,185,129,.4);display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:600;animation:slideUp .3s ease";
+  btn.innerHTML = "\u21BB <span>Nueva versi\u00f3n disponible</span>";
+  btn.onclick = function(){ forceUpdate(); };
+  document.body.appendChild(btn);
 }
 
 function forceUpdate(){
-  if(!("serviceWorker" in navigator)){
-    window.location.reload(true);
-    return;
-  }
   var btn = document.getElementById("sidebar-update-btn");
   if(btn){ btn.textContent = "\u21BB Actualizando..."; btn.disabled = true; }
+  var fb = document.getElementById("update-float");
+  if(fb) fb.remove();
   caches.keys().then(function(names){
     return Promise.all(names.map(function(n){ return caches.delete(n); }));
   }).then(function(){
@@ -1500,9 +1516,13 @@ function forceUpdate(){
   }).then(function(regs){
     return Promise.all(regs.map(function(r){ return r.unregister(); }));
   }).then(function(){
-    window.location.href = window.location.href.split("#")[0].split("?")[0] + "?_v=" + Date.now();
+    window.location.href = window.location.href.split("?")[0] + "?_v=" + Date.now();
   });
 }
+
+var style = document.createElement("style");
+style.textContent = "@keyframes slideUp{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}";
+document.head.appendChild(style);
 </script>
 </body>
 </html>
