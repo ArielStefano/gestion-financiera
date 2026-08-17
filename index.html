@@ -150,6 +150,11 @@
     .install-banner .ib-btn{background:#fff;color:var(--primary);border:none;padding:10px 18px;border-radius:10px;font-weight:700;font-size:14px;white-space:nowrap;min-height:40px}
     .install-banner .ib-close{background:none;border:none;color:rgba(255,255,255,.7);font-size:20px;padding:4px 8px}
     @media(min-width:769px){.install-banner{display:none!important}}
+    .qp-btn{display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 8px;border:1.5px solid var(--gray-200);border-radius:12px;background:#fff;cursor:pointer;transition:all .15s;min-height:60px}
+    .qp-btn:hover,.qp-btn:active{border-color:var(--primary);background:#eff6ff}
+    .qp-icon{font-size:24px;line-height:1}
+    .qp-name{font-size:11px;font-weight:600;color:var(--gray-700);text-align:center;line-height:1.2}
+    .qp-amt{font-size:10px;color:var(--gray-400)}
   </style>
 </head>
 <body>
@@ -301,6 +306,13 @@ function createDemoData(userId){
   if(bEn) budgets.push({id:DB.genId(),user_id:userId,category_id:bEn.id,month:now.getMonth()+1,year:now.getFullYear(),amount:150,warning_threshold:80});
   if(bVi) budgets.push({id:DB.genId(),user_id:userId,category_id:bVi.id,month:now.getMonth()+1,year:now.getFullYear(),amount:450,warning_threshold:80});
   DB.set("budgets_"+userId, budgets);
+
+  setSalary(userId, {amount:2000});
+  setCreditCards(userId, [
+    {id:DB.genId(),name:"Visa Platinum",total_debt:1200,minimum_payment:80,due_date:15,interest_rate:3.5},
+    {id:DB.genId(),name:"Mastercard Gold",total_debt:450,minimum_payment:35,due_date:22,interest_rate:2.8}
+  ]);
+  setQuickExpenses(userId, DEFAULT_QUICK.slice());
 }
 
 function findCat(cats,name){
@@ -312,6 +324,14 @@ function mkTx(uid,aid,cid,type,amt,desc,date,cls,rec,biz){
 }
 
 // ============ FINANCIAL ENGINE ============
+
+function getSalary(userId){ return DB.getOne("salary_"+userId) || {amount:0}; }
+function setSalary(userId, data){ DB.setOne("salary_"+userId, data); }
+function getCreditCards(userId){ return DB.get("credit_cards_"+userId); }
+function setCreditCards(userId, cards){ DB.set("credit_cards_"+userId, cards); }
+function getQuickExpenses(userId){ var q=DB.getOne("quick_expenses_"+userId); return Array.isArray(q)?q:[]; }
+function setQuickExpenses(userId, q){ DB.setOne("quick_expenses_"+userId, q); }
+
 function getMonthTxs(userId, month, year, type){
   var txs = DB.get("transactions_"+userId);
   return txs.filter(function(t){
@@ -613,25 +633,78 @@ function makePeriodSelector(){
 // ============ DASHBOARD PAGE ============
 function renderDashboard(user){
   var d = getDashboardData(user.id, currentPeriod.month, currentPeriod.year);
+  var sal = getSalary(user.id);
+  var cards = getCreditCards(user.id);
+  var totalDebt = 0;
+  var totalMinPay = 0;
+  for(var ci=0; ci<cards.length; ci++){ totalDebt += Number(cards[ci].total_debt); totalMinPay += Number(cards[ci].minimum_payment); }
+  var remaining = sal.amount - totalMinPay;
   var el = document.getElementById("page-content");
+
+  var salHtml =
+    '<div class="stat-card green" style="cursor:pointer;border-left-color:var(--success)" onclick="openSalaryForm()">'+
+    '<div class="label">Sueldo mensual</div>'+
+    '<div class="value" style="color:var(--success)">'+(sal.amount>0?fmt(sal.amount):'<span style="color:var(--gray-400);font-size:16px">Clic para configurar</span>')+'</div>'+
+    (sal.amount>0?'<div class="sub">Clic para editar</div>':'')+
+    '</div>';
+
+  var cardsHtml = "";
+  if(cards.length > 0){
+    cardsHtml =
+    '<div class="stat-card red" style="cursor:pointer;border-left-color:var(--danger)" onclick="navigate(\'accounts\')">'+
+    '<div class="label">Deuda total tarjetas</div>'+
+    '<div class="value" style="color:var(--danger)">'+fmt(totalDebt)+'</div>'+
+    '<div class="sub">Cuota m\u00ednima: '+fmt(totalMinPay)+'/mes</div>'+
+    '</div>'+
+    '<div class="stat-card blue" style="border-left-color:var(--primary)">'+
+    '<div class="label">Despu\u00e9s de cuota m\u00ednima</div>'+
+    '<div class="value" style="color:'+(remaining>=0?"var(--success)":"var(--danger)")+'">'+fmt(remaining)+'</div>'+
+    '<div class="sub">'+fmt(sal.amount)+' - '+fmt(totalMinPay)+'</div>'+
+    '</div>';
+  } else {
+    cardsHtml =
+    '<div class="stat-card orange" style="cursor:pointer;border-left-color:var(--warning)" onclick="openCreditCardForm()">'+
+    '<div class="label">Tarjetas de cr\u00e9dito</div>'+
+    '<div class="value" style="font-size:16px;color:var(--gray-400)">Clic para agregar</div>'+
+    '</div>';
+  }
+
   el.innerHTML =
     '<div class="flex-between" style="margin-bottom:24px">'+
     '<h1 style="font-size:24px;font-weight:700">Dashboard</h1>'+
     makePeriodSelector()+
     '</div>'+
-    '<div class="stat-cards">'+
-    '<div class="stat-card green"><div class="label">Ingresos del mes</div><div class="value" style="color:var(--success)">'+fmt(d.totalIncome)+'</div></div>'+
+
+    '<div class="stat-cards" style="margin-bottom:20px">'+
+    '<div class="stat-card blue"><div class="label">Ingresos del mes</div><div class="value" style="color:var(--success)">'+fmt(d.totalIncome)+'</div></div>'+
     '<div class="stat-card red"><div class="label">Gastos del mes</div><div class="value" style="color:var(--danger)">'+fmt(d.totalExpenses)+'</div></div>'+
-    '<div class="stat-card blue"><div class="label">Balance</div><div class="value" style="color:'+(d.balance>=0?"var(--success)":"var(--danger)")+'">'+fmt(d.balance)+'</div></div>'+
-    '<div class="stat-card purple"><div class="label">Tasa de ahorro</div><div class="value">'+d.savingsRate+'%</div></div>'+
+    '<div class="stat-card purple"><div class="label">Balance</div><div class="value" style="color:'+(d.balance>=0?"var(--success)":"var(--danger)")+'">'+fmt(d.balance)+'</div></div>'+
+    '<div class="stat-card orange"><div class="label">Tasa de ahorro</div><div class="value">'+d.savingsRate+'%</div></div>'+
     '</div>'+
+
+    '<div class="stat-cards" style="margin-bottom:20px">'+
+    salHtml + cardsHtml +
+    '</div>'+
+
+    '<div style="margin-bottom:20px"><div class="flex-gap" style="flex-wrap:wrap">'+
+    '<button class="btn btn-primary btn-sm" onclick="openQuickExpenseModal()">\u26A1 Gasto r\u00e1pido</button>'+
+    '<button class="btn btn-success btn-sm" onclick="openTxForm(\'INCOME\')">+ Ingreso</button>'+
+    '<button class="btn btn-outline btn-sm" onclick="navigate(\'transactions\')">Ver movimientos</button>'+
+    '</div></div>'+
+
     '<div class="grid-2" style="margin-bottom:24px">'+
     '<div class="card"><div class="card-header"><h2>Distribuci\u00f3n de Gastos</h2></div><div class="card-body"><div class="chart-container"><canvas id="chart-pie"></canvas></div></div></div>'+
     '<div class="card"><div class="card-header"><h2>Evoluci\u00f3n Mensual</h2></div><div class="card-body"><div class="chart-container"><canvas id="chart-bar"></canvas></div></div></div>'+
     '</div>'+
+
     '<div class="card" style="margin-bottom:24px"><div class="card-header"><h2>Alertas y Recomendaciones</h2></div><div class="card-body">'+
     renderRecs(d.recommendations)+
     '</div></div>'+
+
+    (cards.length>0?'<div class="card" style="margin-bottom:24px"><div class="card-header"><h2>\uD83D\uDCB3 Mis Tarjetas de Cr\u00e9dito</h2><button class="btn btn-outline btn-sm" onclick="openCreditCardForm()">+ Tarjeta</button></div><div class="card-body" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px">'+
+    (function(){var h="";for(var i=0;i<cards.length;i++){var c=cards[i];var pctC=c.total_debt>0?Math.min(100,Math.round((c.minimum_payment/c.total_debt)*100*12)):0;h+='<div style="padding:14px;border:1.5px solid var(--gray-200);border-radius:12px;cursor:pointer" onclick="openCreditCardForm(\''+c.id+'\')"><div style="font-weight:600;font-size:14px;margin-bottom:8px">'+c.name+'</div><div style="font-size:20px;font-weight:700;color:var(--danger)">'+fmt(c.total_debt)+'</div><div style="font-size:12px;color:var(--gray-500);margin-top:4px">Cuota m\u00ednima: '+fmt(c.minimum_payment)+'</div><div style="font-size:12px;color:var(--gray-500)">Vence: día '+c.due_date+'</div><div style="font-size:11px;color:var(--gray-400);margin-top:4px">Cancelar en ~'+Math.ceil(c.total_debt/c.minimum_payment)+' meses</div></div>';}return h;})()+
+    '</div></div>':'')+
+
     (d.smallExpenses.count>0 ? '<div class="card"><div class="card-header"><h2>Gastos Peque\u00f1os Frecuentes</h2></div><div class="card-body"><div class="rec-item warn"><span>\uD83D\uDCA1</span><span><strong>'+d.smallExpenses.count+' gastos</strong> inferiores a $10 cada uno. Durante el mes representaron <strong>'+fmt(d.smallExpenses.total)+'</strong>.</span></div></div></div>' : '');
 
   if(d.distribution.length>0){
@@ -657,6 +730,229 @@ function renderRecs(recs){
     h += '<div class="rec-item '+recs[i].type+'"><span>'+(icons[recs[i].type]||"")+'</span><span>'+recs[i].text+'</span></div>';
   }
   return h;
+}
+
+// ============ SALARY, CREDIT CARDS, QUICK EXPENSES ============
+
+function openSalaryForm(){
+  var user = getCurrentUser();
+  var sal = getSalary(user.id);
+  var modal = document.createElement("div");
+  modal.className = "modal-overlay";
+  modal.id = "sal-modal";
+  modal.innerHTML = '<div class="modal">'+
+    '<h2>\uD83D\uDCB0 Sueldo Mensual</h2>'+
+    '<form id="sal-form">'+
+    '<div class="form-group"><label>Sueldo mensual neto</label><input type="number" step="0.01" min="0" id="sf-amount" value="'+(sal.amount||'')+'" placeholder="Ej: 1500" required></div>'+
+    '<div class="form-group" style="background:var(--gray-50);padding:12px;border-radius:8px;font-size:13px;color:var(--gray-600)">'+
+    '<p style="margin-bottom:4px">\uD83D\uDCA1 <strong>Tip:</strong> Este valor se usa como referencia para:</p>'+
+    '<ul style="padding-left:18px;margin:0"><li>Calcular tu capacidad de gasto</li><li>Comparar gastos vs ingresos en el An\u00e1lisis</li><li>Detectar si est\u00e1s gastando de m\u00e1s</li></ul></div>'+
+    '<div class="modal-actions"><button type="submit" class="btn btn-primary">Guardar</button>'+
+    '<button type="button" class="btn btn-outline" onclick="document.getElementById(\'sal-modal\').remove()">Cancelar</button></div>'+
+    '</form></div>';
+  document.body.appendChild(modal);
+  document.getElementById("sal-form").onsubmit = function(e){
+    e.preventDefault();
+    var user = getCurrentUser();
+    setSalary(user.id, {amount: parseFloat(document.getElementById("sf-amount").value)||0});
+    document.getElementById("sal-modal").remove();
+    renderPage(user);
+  };
+}
+
+function openCreditCardForm(editId){
+  var user = getCurrentUser();
+  var cards = getCreditCards(user.id);
+  var existing = null;
+  if(editId) for(var i=0;i<cards.length;i++){if(cards[i].id===editId){existing=cards[i];break;}}
+  var modal = document.createElement("div");
+  modal.className = "modal-overlay";
+  modal.id = "cc-modal";
+  modal.innerHTML = '<div class="modal">'+
+    '<h2>'+(existing?'Editar':'Nueva')+' Tarjeta de Cr\u00e9dito</h2>'+
+    '<form id="cc-form">'+
+    '<div class="form-group"><label>Nombre de la tarjeta</label><input type="text" id="cc-name" value="'+(existing?existing.name:'')+'" placeholder="Ej: Visa, Mastercard, Amex" required></div>'+
+    '<div class="form-group"><label>Deuda total actual</label><input type="number" step="0.01" min="0" id="cc-debt" value="'+(existing?existing.total_debt:'')+'" placeholder="Monto total adeudado" required></div>'+
+    '<div class="form-group"><label>Cuota m\u00ednima mensual</label><input type="number" step="0.01" min="0" id="cc-min" value="'+(existing?existing.minimum_payment:'')+'" placeholder="M\u00ednimo a pagar por mes" required></div>'+
+    '<div class="form-group"><label>D\u00eda de vencimiento</label><input type="number" min="1" max="31" id="cc-due" value="'+(existing?existing.due_date:'')+'" placeholder="Ej: 15" required></div>'+
+    '<div class="form-group"><label>Tasa de inter\u00e9s mensual %</label><input type="number" step="0.01" min="0" max="100" id="cc-rate" value="'+(existing?existing.interest_rate:'3')+'" placeholder="Ej: 3"></div>'+
+    (existing?'<div class="form-group"><button type="button" class="btn btn-outline btn-sm" style="color:var(--danger)" onclick="deleteCreditCard(\''+existing.id+'\')">Eliminar esta tarjeta</button></div>':'')+
+    '<div class="modal-actions"><button type="submit" class="btn btn-primary">Guardar</button>'+
+    '<button type="button" class="btn btn-outline" onclick="document.getElementById(\'cc-modal\').remove()">Cancelar</button></div>'+
+    '</form></div>';
+  document.body.appendChild(modal);
+  document.getElementById("cc-form").onsubmit = function(e){
+    e.preventDefault();
+    var user = getCurrentUser();
+    var cards = getCreditCards(user.id);
+    var data = {
+      name: document.getElementById("cc-name").value,
+      total_debt: parseFloat(document.getElementById("cc-debt").value)||0,
+      minimum_payment: parseFloat(document.getElementById("cc-min").value)||0,
+      due_date: parseInt(document.getElementById("cc-due").value)||15,
+      interest_rate: parseFloat(document.getElementById("cc-rate").value)||3
+    };
+    if(existing){
+      for(var i=0;i<cards.length;i++){if(cards[i].id===existing.id){for(var k in data) cards[i][k]=data[k];break;}}
+    } else {
+      data.id = DB.genId();
+      cards.push(data);
+    }
+    setCreditCards(user.id, cards);
+    document.getElementById("cc-modal").remove();
+    renderPage(user);
+  };
+}
+
+function deleteCreditCard(id){
+  if(!confirm("\u00bfEliminar esta tarjeta?")) return;
+  var user = getCurrentUser();
+  var cards = getCreditCards(user.id);
+  var newCards = [];
+  for(var i=0;i<cards.length;i++){if(cards[i].id!==id) newCards.push(cards[i]);}
+  setCreditCards(user.id, newCards);
+  var m = document.getElementById("cc-modal");
+  if(m) m.remove();
+  renderPage(user);
+}
+
+var DEFAULT_QUICK = [
+  {name:"Supermercado",icon:"\uD83D\uDED2",amount:0,category:"Alimentaci\u00f3n",classification:"NECESSARY"},
+  {name:"Transporte",icon:"\uD83D\uDE97",amount:0,category:"Transporte",classification:"NECESSARY"},
+  {name:"Combustible",icon:"\u26FD",amount:0,category:"Combustible",classification:"NECESSARY"},
+  {name:"Farmacia",icon:"\uD83C\uDFE5",amount:0,category:"Salud",classification:"NECESSARY"},
+  {name:"Restaurante",icon:"\uD83C\uDF5D",amount:0,category:"Entretenimiento",classification:"DISCRETIONARY"},
+  {name:"Caf\u00e9",icon:"\u2615",amount:0,category:"Alimentaci\u00f3n",classification:"DISCRETIONARY"}
+];
+
+function openQuickExpenseModal(){
+  var user = getCurrentUser();
+  var presets = getQuickExpenses(user.id);
+  if(presets.length===0) presets = DEFAULT_QUICK.slice();
+  var accs = DB.get("accounts_"+user.id);
+  var cats = DB.get("categories_"+user.id).filter(function(c){return c.type==="EXPENSE";});
+
+  var accOpts = "";
+  for(var i=0;i<accs.length;i++) accOpts+='<option value="'+accs[i].id+'">'+accs[i].name+'</option>';
+
+  var presetBtns = "";
+  for(var j=0;j<presets.length;j++){
+    var p=presets[j];
+    presetBtns+='<button type="button" class="qp-btn" onclick="fillQuickPreset('+j+')" data-idx="'+j+'">'+
+    '<span class="qp-icon">'+p.icon+'</span><span class="qp-name">'+p.name+'</span>'+
+    (p.amount>0?'<span class="qp-amt">'+fmt(p.amount)+'</span>':'')+
+    '</button>';
+  }
+
+  var modal = document.createElement("div");
+  modal.className = "modal-overlay";
+  modal.id = "qp-modal";
+  modal.innerHTML = '<div class="modal">'+
+    '<h2>\u26A1 Gasto R\u00e1pido</h2>'+
+    '<div style="font-size:13px;color:var(--gray-500);margin-bottom:12px">Selecciona un gasto r\u00e1pido o ingresa manualmente</div>'+
+    '<div id="qp-presets" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px">'+presetBtns+'</div>'+
+    '<form id="qp-form">'+
+    '<div class="form-group"><label>Monto</label><input type="number" step="0.01" min="0.01" id="qf-amount" required></div>'+
+    '<div class="form-group"><label>Descripci\u00f3n</label><input type="text" id="qf-desc" placeholder="Ej: Compra en supermarket" required></div>'+
+    '<div class="form-group"><label>Categor\u00eda</label><select id="qf-cat" required>'+
+    (function(){var h="";for(var k=0;k<cats.length;k++) h+='<option value="'+cats[k].id+'">'+cats[k].icon+' '+cats[k].name+'</option>';return h;})()+
+    '</select></div>'+
+    '<div class="form-group"><label>Cuenta</label><select id="qf-acc" required>'+accOpts+'</select></div>'+
+    '<div class="modal-actions"><button type="submit" class="btn btn-danger">\uD83D\uDED2 Registrar Gasto</button>'+
+    '<button type="button" class="btn btn-outline" onclick="document.getElementById(\'qp-modal\').remove()">Cancelar</button></div>'+
+    '</form></div>';
+
+  document.body.appendChild(modal);
+
+  document.getElementById("qp-form").onsubmit = function(e){
+    e.preventDefault();
+    var user = getCurrentUser();
+    var txs = DB.get("transactions_"+user.id);
+    txs.push({
+      id: DB.genId(), user_id: user.id,
+      type: "EXPENSE",
+      amount: parseFloat(document.getElementById("qf-amount").value),
+      description: document.getElementById("qf-desc").value,
+      date: new Date().toISOString().split("T")[0],
+      category_id: document.getElementById("qf-cat").value,
+      account_id: document.getElementById("qf-acc").value,
+      classification: "NECESSARY",
+      is_recurring: false,
+      is_business: "PERSONAL"
+    });
+    DB.set("transactions_"+user.id, txs);
+    recalcBalances(user.id);
+    document.getElementById("qp-modal").remove();
+    renderPage(user);
+  };
+
+  window._quickPresets = presets;
+  window._quickCats = cats;
+}
+
+function fillQuickPreset(idx){
+  var p = window._quickPresets[idx];
+  var cats = window._quickCats;
+  document.getElementById("qf-desc").value = p.name;
+  for(var i=0;i<cats.length;i++){
+    if(cats[i].name===p.category){document.getElementById("qf-cat").value=cats[i].id;break;}
+  }
+  if(p.amount>0) document.getElementById("qf-amount").value=p.amount;
+  document.getElementById("qf-amount").focus();
+  var btns = document.querySelectorAll("#qp-presets .qp-btn");
+  for(var j=0;j<btns.length;j++) btns[j].style.borderColor = j===idx?"var(--primary)":"var(--gray-200)";
+}
+
+function openQuickExpensesManager(){
+  var user = getCurrentUser();
+  var presets = getQuickExpenses(user.id);
+  if(presets.length===0) presets = DEFAULT_QUICK.slice();
+  var modal = document.createElement("div");
+  modal.className = "modal-overlay";
+  modal.id = "qpm-modal";
+  var rows = "";
+  for(var i=0;i<presets.length;i++){
+    var p=presets[i];
+    rows+='<tr><td style="text-align:center">'+p.icon+'</td><td><input type="text" value="'+p.name+'" id="qpm-name-'+i+'" style="width:100%;padding:6px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px"></td><td><input type="text" value="'+p.category+'" id="qpm-cat-'+i+'" style="width:100%;padding:6px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px"></td><td><input type="number" step="0.01" min="0" value="'+p.amount+'" id="qpm-amt-'+i+'" style="width:100%;padding:6px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px"></td><td><button type="button" class="btn btn-outline btn-sm" onclick="removeQuickPreset('+i+')" style="color:var(--danger)">X</button></td></tr>';
+  }
+  modal.innerHTML = '<div class="modal" style="max-width:560px">'+
+    '<h2>\u26A1 Gastos R\u00e1pidos - Configurar</h2>'+
+    '<div style="font-size:13px;color:var(--gray-500);margin-bottom:12px">Personaliza los botones de gasto r\u00e1pido que aparecen en el Dashboard</div>'+
+    '<form id="qpm-form"><div class="table-wrap"><table><thead><tr><th></th><th>Nombre</th><th>Categor\u00eda</th><th>Monto fijo</th><th></th></tr></thead><tbody id="qpm-tbody">'+rows+'</tbody></table></div>'+
+    '<div class="modal-actions"><button type="button" class="btn btn-outline btn-sm" onclick="addQuickPreset()">+ Agregar</button>'+
+    '<div style="flex:1"></div><button type="submit" class="btn btn-primary">Guardar</button>'+
+    '<button type="button" class="btn btn-outline" onclick="document.getElementById(\'qpm-modal\').remove()">Cancelar</button></div></form></div>';
+  document.body.appendChild(modal);
+  document.getElementById("qpm-form").onsubmit = function(e){
+    e.preventDefault();
+    var user = getCurrentUser();
+    var newPresets = [];
+    for(var i=0;i<presets.length;i++){
+      var nm=document.getElementById("qpm-name-"+i);
+      var ct=document.getElementById("qpm-cat-"+i);
+      var am=document.getElementById("qpm-amt-"+i);
+      if(nm && ct && am) newPresets.push({name:nm.value,icon:presets[i].icon,category:ct.value,amount:parseFloat(am.value)||0,classification:"NECESSARY"});
+    }
+    setQuickExpenses(user.id, newPresets);
+    document.getElementById("qpm-modal").remove();
+    alert("Guardado. Actualiza el Dashboard para ver los cambios.");
+  };
+}
+function addQuickPreset(){
+  var presets = getQuickExpenses(getCurrentUser().id);
+  if(presets.length===0) presets = DEFAULT_QUICK.slice();
+  presets.push({name:"Nuevo gasto",icon:"\uD83D\uDCE6",category:"Otros gastos",amount:0,classification:"NECESSARY"});
+  setQuickExpenses(getCurrentUser().id, presets);
+  document.getElementById("qpm-modal").remove();
+  openQuickExpensesManager();
+}
+function removeQuickPreset(idx){
+  var presets = getQuickExpenses(getCurrentUser().id);
+  if(presets.length===0) presets = DEFAULT_QUICK.slice();
+  presets.splice(idx,1);
+  setQuickExpenses(getCurrentUser().id, presets);
+  document.getElementById("qpm-modal").remove();
+  openQuickExpensesManager();
 }
 
 // ============ TRANSACTIONS PAGE ============
@@ -925,6 +1221,21 @@ function renderAccounts(user){
     '<button class="btn btn-outline btn-sm" style="margin-top:8px;color:var(--danger)" onclick="deleteAccount(\''+a.id+'\')">Eliminar</button>'+
     '</div></div>';
   }
+  var cc = getCreditCards(user.id);
+  var ccHtml = "";
+  if(cc.length>0){
+    var totD=0,totM=0;
+    for(var ci=0;ci<cc.length;ci++){totD+=Number(cc[ci].total_debt);totM+=Number(cc[ci].minimum_payment);}
+    ccHtml='<div class="card" style="margin-bottom:16px"><div class="card-header"><h2>\uD83D\uDCB3 Tarjetas de Cr\u00e9dito</h2><div class="flex-gap"><button class="btn btn-outline btn-sm" onclick="openQuickExpensesManager()">\u26A1 Config. gastos r\u00e1pidos</button><button class="btn btn-primary btn-sm" onclick="openCreditCardForm()">+ Tarjeta</button></div></div><div class="table-wrap"><table>'+
+    '<thead><tr><th>Nombre</th><th style="text-align:right">Deuda Total</th><th style="text-align:right">Cuota M\u00ednima</th><th>D\u00eda Vence</th><th style="text-align:right">Tasa</th><th style="text-align:center">Acciones</th></tr></thead><tbody>';
+    for(var cj=0;cj<cc.length;cj++){
+      var c=cc[cj];
+      ccHtml+='<tr style="cursor:pointer" onclick="openCreditCardForm(\''+c.id+'\')"><td style="font-weight:600">'+c.name+'</td><td style="text-align:right;color:var(--danger);font-weight:700">'+fmt(c.total_debt)+'</td><td style="text-align:right">'+fmt(c.minimum_payment)+'</td><td style="text-align:center">D\u00eda '+c.due_date+'</td><td style="text-align:right">'+(c.interest_rate||0)+'%</td><td style="text-align:center"><button class="btn btn-outline btn-sm" onclick="event.stopPropagation();deleteCreditCard(\''+c.id+'\')" style="color:var(--danger)">\uD83D\uDDD1\uFE0F</button></td></tr>';
+    }
+    ccHtml+='</tbody></table></div><div style="padding:16px;display:flex;gap:24px;font-size:13px;color:var(--gray-500)"><span>Total deuda: <strong style="color:var(--danger)">'+fmt(totD)+'</strong></span><span>Cuota total: <strong>'+fmt(totM)+'</strong></span></div></div>';
+  } else {
+    ccHtml='<div class="card" style="margin-bottom:16px"><div class="card-body" style="text-align:center;padding:24px"><div style="font-size:32px;margin-bottom:8px">\uD83D\uDCB3</div><p style="color:var(--gray-500);margin-bottom:12px">Agrega tus tarjetas de cr\u00e9dito para rastrear deuda y cuota m\u00ednima</p><button class="btn btn-primary btn-sm" onclick="openCreditCardForm()">+ Tarjeta de Cr\u00e9dito</button></div></div>';
+  }
   document.getElementById("page-content").innerHTML =
     '<div class="flex-between" style="margin-bottom:24px">'+
     '<div><h1 style="font-size:24px;font-weight:700">Cuentas</h1><p style="font-size:14px;color:var(--gray-500)">Balance total: '+fmt(total)+'</p></div>'+
@@ -932,6 +1243,7 @@ function renderAccounts(user){
     '<button class="btn btn-purple btn-sm" onclick="openTransferForm()">Transferir</button>'+
     '<button class="btn btn-primary btn-sm" onclick="openAccountForm()">+ Cuenta</button>'+
     '</div></div>'+
+    ccHtml+
     '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px">'+cards+'</div>';
 }
 function openAccountForm(editId){
@@ -1076,6 +1388,8 @@ function deleteBudget(id){
 // ============ ANALYSIS PAGE ============
 function renderAnalysis(user){
   var d=getAnalysisData(user.id,currentPeriod.month,currentPeriod.year);
+  var sal=getSalary(user.id);
+  var salPct = sal.amount>0?Math.round((d.totalExpenses/sal.amount)*100):0;
   var el=document.getElementById("page-content");
   el.innerHTML =
     '<div class="flex-between" style="margin-bottom:24px">'+
@@ -1085,6 +1399,7 @@ function renderAnalysis(user){
     '<div class="stat-card orange"><div class="label">Gastos Fijos</div><div class="value" style="color:var(--warning)">'+fmt(d.totalFixed)+'</div><div class="sub">'+(d.totalIncome>0?Math.round((d.totalFixed/d.totalIncome)*100):0)+'% de ingresos</div></div>'+
     '<div class="stat-card blue"><div class="label">Gastos Variables</div><div class="value">'+fmt(d.totalVariable)+'</div></div>'+
     '<div class="stat-card green"><div class="label">Disponible antes de variables</div><div class="value" style="color:'+(d.availableBeforeVariable>=0?"var(--success)":"var(--danger)")+'">'+fmt(d.availableBeforeVariable)+'</div></div>'+
+    (sal.amount>0?'<div class="stat-card '+(salPct>100?"red":"green")+'"><div class="label">Gastos / Sueldo</div><div class="value" style="color:'+(salPct>100?"var(--danger)":"var(--success)")+'">'+salPct+'%</div><div class="sub">'+fmt(d.totalExpenses)+' de '+fmt(sal.amount)+'</div></div>':'')+
     '</div>'+
     '<div class="grid-2" style="margin-bottom:24px">'+
     '<div class="card"><div class="card-header"><h2>Distribuci\u00f3n de Gastos</h2></div><div class="card-body"><div class="chart-container"><canvas id="ana-pie"></canvas></div></div></div>'+
