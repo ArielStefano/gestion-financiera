@@ -417,8 +417,20 @@ function destroyCharts(){
 }
 
 // ============ RENDER ============
+function ensureDemoUser(){
+  var users = DB.get("users");
+  var exists = false;
+  for(var i=0;i<users.length;i++){
+    if(users[i].email==="demo@finance.com"){exists=true;break;}
+  }
+  if(!exists){
+    registerUser("Demo User","demo@finance.com","demo123");
+  }
+}
+
 function render(){
   try{
+    ensureDemoUser();
     var user = getCurrentUser();
     if(!user) return renderAuth();
     renderApp(user);
