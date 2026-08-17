@@ -633,14 +633,17 @@ function renderTransactions(user){
 
   var rows = "";
   if(pageTxs.length===0){
-    rows = '<tr><td colspan="6" style="text-align:center;color:var(--gray-400);padding:32px">No hay movimientos</td></tr>';
+    rows = '<tr><td colspan="7" style="text-align:center;color:var(--gray-400);padding:32px">No hay movimientos</td></tr>';
   }
   for(var ri=0;ri<pageTxs.length;ri++){
     var t = pageTxs[ri];
     var cat=null,acc=null;
     for(var ci2=0;ci2<cats.length;ci2++){if(cats[ci2].id===t.category_id){cat=cats[ci2];break;}}
     for(var ai2=0;ai2<accs.length;ai2++){if(accs[ai2].id===t.account_id){acc=accs[ai2];break;}}
+    var typeBadge = t.type==="INCOME" ? '<span class="badge badge-green">Ingreso</span>' : '<span class="badge badge-red">Gasto</span>';
+    var bizBadge = t.is_business==="BUSINESS" ? ' <span class="badge badge-yellow">Negocio</span>' : '';
     rows += '<tr><td>'+new Date(t.date).toLocaleDateString("es")+'</td><td>'+t.description+'</td>'+
+    '<td>'+typeBadge+bizBadge+'</td>'+
     '<td><span class="badge badge-blue">'+(cat?cat.icon+" "+cat.name:"?")+'</span></td>'+
     '<td>'+(acc?acc.name:"?")+'</td>'+
     '<td style="text-align:right;font-weight:600;color:'+(t.type==="INCOME"?"var(--success)":"var(--danger)")+'">'+(t.type==="INCOME"?"+":"-")+fmt(t.amount)+'</td>'+
@@ -656,12 +659,13 @@ function renderTransactions(user){
     pagHtml += '</div>';
   }
 
+  var txCount = txs.length;
   document.getElementById("page-content").innerHTML =
     '<div class="flex-between" style="margin-bottom:24px">'+
     '<div class="flex-gap"><h1 style="font-size:24px;font-weight:700">Movimientos</h1>'+makePeriodSelector()+'</div>'+
     '<div class="flex-gap">'+
-    '<button class="btn btn-success btn-sm" onclick="openTxForm(\'INCOME\')">+ Ingreso</button>'+
-    '<button class="btn btn-danger btn-sm" onclick="openTxForm(\'EXPENSE\')">+ Gasto</button>'+
+    '<button class="btn btn-primary btn-sm" onclick="openTxForm(\'INCOME\')">+ Nuevo Movimiento</button>'+
+    (txCount>0?'<button class="btn btn-outline btn-sm" style="color:var(--danger)" onclick="deleteAllTx()">Borrar todo</button>':'')+
     '</div></div>'+
     '<div class="card" style="margin-bottom:16px"><div class="card-body"><div class="filter-bar">'+
     '<input type="text" placeholder="Buscar..." value="'+txFilter.search+'" oninput="txFilter.search=this.value;txFilter.page=1;renderTransactions(getCurrentUser())">'+
@@ -672,56 +676,81 @@ function renderTransactions(user){
     '</select>'+
     '</div></div></div>'+
     '<div class="card"><div class="table-wrap"><table>'+
-    '<thead><tr><th>Fecha</th><th>Descripci\u00f3n</th><th>Categor\u00eda</th><th>Cuenta</th><th style="text-align:right">Monto</th><th style="text-align:center">Acciones</th></tr></thead>'+
+    '<thead><tr><th>Fecha</th><th>Descripci\u00f3n</th><th>Tipo</th><th>Categor\u00eda</th><th>Cuenta</th><th style="text-align:right">Monto</th><th style="text-align:center">Acciones</th></tr></thead>'+
     '<tbody>'+rows+'</tbody></table></div>'+pagHtml+'</div>';
 }
 
 function openTxForm(type, existing){
   var user=getCurrentUser();
-  var cats=DB.get("categories_"+user.id).filter(function(c){return c.type===type;});
+  var allCats=DB.get("categories_"+user.id);
   var accs=DB.get("accounts_"+user.id);
-  var catOpts2 = '<option value="">Seleccionar</option>';
-  for(var i=0;i<cats.length;i++){
-    catOpts2 += '<option value="'+cats[i].id+'" '+(existing && existing.category_id===cats[i].id?"selected":"")+'>'+cats[i].icon+" "+cats[i].name+'</option>';
+  var currentType = existing ? existing.type : (type || "EXPENSE");
+
+  var allCatOpts = '<option value="">Seleccionar categor\u00eda</option>';
+  for(var i=0;i<allCats.length;i++){
+    allCatOpts += '<option value="'+allCats[i].id+'" data-type="'+allCats[i].type+'" '+(existing && existing.category_id===allCats[i].id?"selected":"")+'>'+allCats[i].icon+" "+allCats[i].name+'</option>';
   }
-  var accOpts2 = '<option value="">Seleccionar</option>';
+  var accOpts2 = '<option value="">Seleccionar cuenta</option>';
   for(var j=0;j<accs.length;j++){
     accOpts2 += '<option value="'+accs[j].id+'" '+(existing && existing.account_id===accs[j].id?"selected":"")+'>'+accs[j].name+'</option>';
   }
+
   var modal = document.createElement("div");
   modal.className = "modal-overlay";
   modal.id = "tx-modal";
   modal.innerHTML = '<div class="modal">'+
-    '<h2>'+(existing?"Editar":type==="INCOME"?"Registrar Ingreso":"Registrar Gasto")+'</h2>'+
+    '<h2>'+(existing?"Editar Movimiento":"Nuevo Movimiento")+'</h2>'+
     '<form id="tx-form">'+
+    '<div class="form-group"><label>Tipo de movimiento</label>'+
+    '<div style="display:flex;gap:8px;margin-top:4px">'+
+    '<label style="display:flex;align-items:center;gap:6px;padding:8px 16px;border:2px solid '+(currentType==="INCOME"?"var(--success)":"var(--gray-300)")+';border-radius:8px;cursor:pointer;flex:1;text-align:center;justify-content:center;font-weight:600;color:'+(currentType==="INCOME"?"var(--success)":"var(--gray-500)")+';transition:all .2s">'+
+    '<input type="radio" name="tf-type" value="INCOME" '+(currentType==="INCOME"?"checked":"")+' style="display:none" onchange="onTxTypeChange(this.value)">\uD83D\uDCB0 Ingreso</label>'+
+    '<label style="display:flex;align-items:center;gap:6px;padding:8px 16px;border:2px solid '+(currentType==="EXPENSE"?"var(--danger)":"var(--gray-300)")+';border-radius:8px;cursor:pointer;flex:1;text-align:center;justify-content:center;font-weight:600;color:'+(currentType==="EXPENSE"?"var(--danger)":"var(--gray-500)")+';transition:all .2s">'+
+    '<input type="radio" name="tf-type" value="EXPENSE" '+(currentType==="EXPENSE"?"checked":"")+' style="display:none" onchange="onTxTypeChange(this.value)">\uD83D\uDCCB Gasto</label>'+
+    '</div></div>'+
     '<div class="form-group"><label>Monto</label><input type="number" step="0.01" min="0" id="tf-amount" value="'+(existing?existing.amount:"")+'" required></div>'+
-    '<div class="form-group"><label>Descripci\u00f3n</label><input type="text" id="tf-desc" value="'+(existing?existing.description:"")+'" required></div>'+
+    '<div class="form-group"><label>Descripci\u00f3n</label><input type="text" id="tf-desc" value="'+(existing?existing.description:"")+'" placeholder="Ej: Salario, Supermercado, Alquiler..." required></div>'+
     '<div class="form-group"><label>Fecha</label><input type="date" id="tf-date" value="'+(existing?existing.date:new Date().toISOString().split("T")[0])+'" required></div>'+
-    '<div class="form-group"><label>Categor\u00eda</label><select id="tf-cat" required>'+catOpts2+'</select></div>'+
-    '<div class="form-group"><label>Cuenta</label><select id="tf-acc" required>'+accOpts2+'</select></div>'+
-    (type==="EXPENSE"?'<div class="form-group"><label>Clasificaci\u00f3n</label><select id="tf-class"><option value="NECESSARY" '+(existing&&existing.classification==="NECESSARY"?"selected":"")+'>Necesario</option><option value="DISCRETIONARY" '+(existing&&existing.classification==="DISCRETIONARY"?"selected":"")+'>Discrecional</option><option value="BUSINESS" '+(existing&&existing.classification==="BUSINESS"?"selected":"")+'>Negocio</option></select></div>':'')+
-    '<div class="form-group"><label><input type="checkbox" id="tf-recurring" '+(existing&&existing.is_recurring?"checked":"")+'> Recurrente</label></div>'+
-    '<div class="modal-actions"><button type="submit" class="btn btn-primary">Guardar</button><button type="button" class="btn btn-outline" onclick="document.getElementById(\'tx-modal\').remove()">Cancelar</button></div>'+
+    '<div class="form-group"><label>Categor\u00eda</label><select id="tf-cat" required onchange="onTxCatChange()">'+allCatOpts+'</select></div>'+
+    '<div class="form-group"><label>Cuenta / Medio de pago</label><select id="tf-acc" required>'+accOpts2+'</select></div>'+
+    '<div class="form-group"><label>Clasificaci\u00f3n</label><select id="tf-class">'+
+    '<option value="NECESSARY" '+(existing&&existing.classification==="NECESSARY"?"selected":"")+'>\uD83D\uDEE1\uFE0F Necesario</option>'+
+    '<option value="DISCRETIONARY" '+(existing&&existing.classification==="DISCRETIONARY"?"selected":"")+'>\uD83C\uDFAC Discrecional</option>'+
+    '<option value="BUSINESS" '+(existing&&existing.classification==="BUSINESS"?"selected":"")+'>\uD83C\uDFE2 Negocio</option>'+
+    '<option value="SAVING" '+(existing&&existing.classification==="SAVING"?"selected":"")+'>\uD83C\uDFE0 Ahorro</option>'+
+    '</select></div>'+
+    '<div class="form-group"><label>Responsabilidad</label><select id="tf-biz">'+
+    '<option value="PERSONAL" '+(existing&&existing.is_business==="PERSONAL"?"selected":"")+'>\uD83D\uDC64 Personal</option>'+
+    '<option value="BUSINESS" '+(existing&&existing.is_business==="BUSINESS"?"selected":"")+'>\uD83C\uDFE2 Negocio</option>'+
+    '</select></div>'+
+    '<div class="form-group"><label><input type="checkbox" id="tf-recurring" '+(existing&&existing.is_recurring?"checked":"")+'> Gasto/Ingreso recurrente (fijo mensual)</label></div>'+
+    '<div class="modal-actions"><button type="submit" class="btn btn-primary">\uD83D\uDCBE Guardar</button><button type="button" class="btn btn-outline" onclick="document.getElementById(\'tx-modal\').remove()">Cancelar</button></div>'+
     '</form></div>';
   document.body.appendChild(modal);
+
   document.getElementById("tx-form").onsubmit=function(e){
     e.preventDefault();
     var user=getCurrentUser();
     var txs=DB.get("transactions_"+user.id);
+    var selType = document.querySelector('input[name="tf-type"]:checked');
+    var finalType = selType ? selType.value : currentType;
     var data={
-      type:type,
+      type:finalType,
       amount:parseFloat(document.getElementById("tf-amount").value),
       description:document.getElementById("tf-desc").value,
       date:document.getElementById("tf-date").value,
       category_id:document.getElementById("tf-cat").value,
       account_id:document.getElementById("tf-acc").value,
-      classification:document.getElementById("tf-class")?document.getElementById("tf-class").value:"NECESSARY",
+      classification:document.getElementById("tf-class").value,
       is_recurring:document.getElementById("tf-recurring").checked,
-      is_business:"PERSONAL"
+      is_business:document.getElementById("tf-biz").value
     };
     if(existing){
       for(var i=0;i<txs.length;i++){
-        if(txs[i].id===existing.id){txs[i].type=data.type;txs[i].amount=data.amount;txs[i].description=data.description;txs[i].date=data.date;txs[i].category_id=data.category_id;txs[i].account_id=data.account_id;txs[i].classification=data.classification;txs[i].is_recurring=data.is_recurring;break;}
+        if(txs[i].id===existing.id){
+          for(var k in data) txs[i][k]=data[k];
+          break;
+        }
       }
     } else {
       data.id=DB.genId();data.user_id=user.id;
@@ -732,6 +761,49 @@ function openTxForm(type, existing){
     document.getElementById("tx-modal").remove();
     renderPage(user);
   };
+
+  onTxTypeChange(currentType);
+}
+
+function onTxTypeChange(type){
+  var labels = document.querySelectorAll("#tx-modal label[style]");
+  for(var i=0;i<labels.length;i++){
+    if(labels[i].querySelector('input[name="tf-type"]')){
+      var input = labels[i].querySelector('input[name="tf-type"]');
+      var isActive = input.value === type;
+      labels[i].style.borderColor = isActive ? (type==="INCOME"?"var(--success)":"var(--danger)") : "var(--gray-300)";
+      labels[i].style.color = isActive ? (type==="INCOME"?"var(--success)":"var(--danger)") : "var(--gray-500)";
+    }
+  }
+  var catSelect = document.getElementById("tf-cat");
+  if(!catSelect) return;
+  var selectedVal = catSelect.value;
+  var allOpts = catSelect.options;
+  var hasVisible = false;
+  var firstVisible = null;
+  for(var j=0;j<allOpts.length;j++){
+    if(j===0) continue;
+    var optType = allOpts[j].getAttribute("data-type");
+    var show = (optType === type);
+    allOpts[j].style.display = show ? "" : "none";
+    if(show && !firstVisible) firstVisible = allOpts[j].value;
+    if(allOpts[j].value === selectedVal && show) hasVisible = true;
+  }
+  if(!hasVisible && firstVisible) catSelect.value = firstVisible;
+}
+
+function onTxCatChange(){
+  var catSelect = document.getElementById("tf-cat");
+  if(!catSelect) return;
+  var opt = catSelect.options[catSelect.selectedIndex];
+  if(opt && opt.getAttribute("data-type")){
+    var type = opt.getAttribute("data-type");
+    var radio = document.querySelector('input[name="tf-type"][value="'+type+'"]');
+    if(radio && !radio.checked){
+      radio.checked = true;
+      onTxTypeChange(type);
+    }
+  }
 }
 
 function editTx(id){
@@ -748,6 +820,13 @@ function deleteTx(id){
   var newTxs=[];
   for(var i=0;i<txs.length;i++){if(txs[i].id!==id)newTxs.push(txs[i]);}
   DB.set("transactions_"+user.id,newTxs);
+  recalcBalances(user.id);
+  renderPage(user);
+}
+function deleteAllTx(){
+  if(!confirm("\u00bfEliminar TODOS los movimientos? Esta acci\u00f3n no se puede deshacer.")) return;
+  var user=getCurrentUser();
+  DB.set("transactions_"+user.id, []);
   recalcBalances(user.id);
   renderPage(user);
 }
