@@ -26,6 +26,20 @@
     .auth-card .error{background:#fef2f2;color:var(--danger);padding:10px;border-radius:8px;margin-bottom:16px;font-size:14px}
     .auth-card .demo-info{margin-top:20px;padding:12px;background:var(--gray-50);border-radius:8px;text-align:center;font-size:13px;color:var(--gray-500)}
     .auth-card .demo-info strong{color:var(--gray-700)}
+    .ob-card{padding:32px 24px}
+    .ob-progress{display:flex;gap:6px;margin-bottom:8px}
+    .ob-step-label{font-size:11px;color:var(--gray-400);text-transform:uppercase;letter-spacing:.5px;margin-bottom:20px;font-weight:600}
+    .ob-icon{font-size:44px;margin-bottom:12px;text-align:center}
+    .ob-card h2{font-size:22px;font-weight:700;text-align:center;margin-bottom:8px}
+    .ob-desc{text-align:center;color:var(--gray-600);font-size:14px;margin-bottom:20px;line-height:1.5}
+    .ob-hint{font-size:12px;color:var(--gray-400);text-align:center;margin:-8px 0 16px}
+    .btn-link{width:100%;background:none;border:none;color:var(--gray-400);font-size:13px;padding:14px;cursor:pointer;text-decoration:underline}
+    .type-toggle{display:flex;gap:8px}
+    .type-opt{flex:1;display:flex;align-items:center;justify-content:center;padding:12px 8px;border:2px solid var(--gray-200);border-radius:10px;font-weight:600;font-size:14px;color:var(--gray-500);cursor:pointer;text-align:center;-webkit-tap-highlight-color:transparent;transition:all .15s}
+    .type-opt.income.sel{border-color:var(--success);color:var(--success);background:#ecfdf5}
+    .type-opt.expense.sel{border-color:var(--danger);color:var(--danger);background:#fef2f2}
+    .adv-toggle{width:100%;background:none;border:none;color:var(--primary);font-size:13px;font-weight:600;padding:10px 0;cursor:pointer;text-align:center}
+    .btn-link-danger{background:none;border:none;color:var(--gray-400);font-size:12px;padding:8px;cursor:pointer;text-decoration:underline}
 
     .form-group{margin-bottom:16px}
     .form-group label{display:block;font-size:14px;font-weight:500;color:var(--gray-700);margin-bottom:6px}
@@ -228,8 +242,19 @@ function registerUser(name, email, password){
   DEFAULT_EXPENSE.forEach(function(c){ cats.push({id:DB.genId(),name:c.name,icon:c.icon,color:c.color,type:"EXPENSE",user_id:user.id}); });
   DEFAULT_INCOME.forEach(function(c){ cats.push({id:DB.genId(),name:c.name,icon:c.icon,color:c.color,type:"INCOME",user_id:user.id}); });
   DB.set("categories_"+user.id, cats);
-  createDemoData(user.id);
-  var safeUser = {id:user.id,name:user.name,email:user.email,currency:user.currency};
+  if(email==="demo@finance.com"){
+    createDemoData(user.id);
+    setSalary(user.id,{amount:2000});
+    setCreditCards(user.id,[
+      {id:DB.genId(),name:"Visa Platinum",total_debt:1200,minimum_payment:80,due_date:15,interest_rate:3.5},
+      {id:DB.genId(),name:"Mastercard Gold",total_debt:450,minimum_payment:35,due_date:22,interest_rate:2.8}
+    ]);
+  } else {
+    DB.set("transactions_"+user.id,[]);
+    setSalary(user.id,{amount:0});
+    user.is_new = true;
+  }
+  var safeUser = {id:user.id,name:user.name,email:user.email,currency:user.currency,is_new:user.is_new||false};
   DB.setOne("current_user", safeUser);
   return safeUser;
 }
@@ -526,10 +551,9 @@ function renderAuth(){
   document.getElementById("app").innerHTML =
     '<div class="auth-page"><div class="auth-card">'+
     '<h1>\uD83D\uDCB0 FinanceApp</h1>'+
-    '<p class="subtitle">Gesti\u00f3n Financiera Personal</p>'+
+    '<p class="subtitle">Controla tus gastos y ahorra mejor</p>'+
     '<div id="auth-error"></div>'+
     '<div id="auth-form"></div>'+
-    '<div class="demo-info">Demo: <strong>demo@finance.com</strong> / <strong>demo123</strong></div>'+
     '</div></div>';
   showLogin();
 }
@@ -537,15 +561,16 @@ function renderAuth(){
 function showLogin(){
   document.getElementById("auth-form").innerHTML =
     '<form id="login-form">'+
-    '<div class="form-group"><label>Email</label><input type="email" id="email" value="demo@finance.com" required></div>'+
-    '<div class="form-group"><label>Contrase\u00f1a</label><input type="password" id="password" value="demo123" required></div>'+
+    '<div class="form-group"><label>Email</label><input type="email" id="email" placeholder="tu@email.com" required></div>'+
+    '<div class="form-group"><label>Contrase\u00f1a</label><input type="password" id="password" placeholder="Tu contrase\u00f1a" required></div>'+
     '<button type="submit" class="btn btn-primary btn-block">Iniciar Sesi\u00f3n</button>'+
     '</form>'+
-    '<p style="text-align:center;margin-top:16px;font-size:14px;color:var(--gray-500)">\u00bfNo tienes cuenta? <a href="#" class="link" onclick="showRegister();return false">Registrarse</a></p>';
+    '<button class="btn btn-outline btn-block" style="margin-top:10px" onclick="demoLogin()">\uD83D\uDC41\uFE0F Ver demo con datos de ejemplo</button>'+
+    '<p style="text-align:center;margin-top:16px;font-size:14px;color:var(--gray-500)">\u00bfPrimera vez? <a href="#" class="link" onclick="showRegister();return false"><strong>Crear mi cuenta gratis</strong></a></p>';
   document.getElementById("login-form").onsubmit = function(e){
     e.preventDefault();
     try{
-      loginUser(document.getElementById("email").value, document.getElementById("password").value);
+      loginUser(document.getElementById("email").value.trim(), document.getElementById("password").value);
       render();
     } catch(err){
       document.getElementById("auth-error").innerHTML = '<div class="error">'+err.message+'</div>';
@@ -553,20 +578,122 @@ function showLogin(){
   };
 }
 
+function demoLogin(){
+  try{
+    ensureDemoUser();
+    loginUser("demo@finance.com","demo123");
+    render();
+  } catch(err){
+    document.getElementById("auth-error").innerHTML = '<div class="error">'+err.message+'</div>';
+  }
+}
+
+// ============ ONBOARDING WIZARD ============
+var obStep = 1;
+var obData = {salary:0, accName:"", accType:"BANK", accBalance:0};
+
+function showOnboarding(user){
+  var stepHtml = "";
+  var progress = "";
+  for(var s=1;s<=3;s++){
+    progress += '<span style="flex:1;height:4px;border-radius:2px;background:'+(s<=obStep?"var(--primary)":"var(--gray-200)")+'"></span>';
+  }
+
+  if(obStep===1){
+    stepHtml =
+    '<div class="ob-icon">\uD83D\uDCB0</div>'+
+    '<h2>\u00A1Hola, '+user.name.split(" ")[0]+'!</h2>'+
+    '<p class="ob-desc">Vamos a configurar tu app en 30 segundos. Primero: <strong>\u00bfcu\u00e1nto ingresas al mes?</strong></p>'+
+    '<div class="form-group"><label>Sueldo mensual (aproximado)</label><input type="number" id="ob-salary" placeholder="Ej: 1500" min="0" autofocus></div>'+
+    '<p class="ob-hint">Es solo una referencia para medir tus gastos. Puedes cambiarla despu\u00e9s.</p>'+
+    '<button class="btn btn-primary btn-block" onclick="obNext()">Continuar \u2192</button>'+
+    '<button class="btn-link" onclick="skipOnboarding()">Prefiero hacerlo despu\u00e9s</button>';
+  }
+  else if(obStep===2){
+    stepHtml =
+    '<div class="ob-icon">\uD83C\uDFE6</div>'+
+    '<h2>\u00bfDe d\u00f3nde manejas tu dinero?</h2>'+
+    '<p class="ob-desc">Crea tu primera cuenta para registrar movimientos.</p>'+
+    '<div class="form-group"><label>Nombre de la cuenta</label><input type="text" id="ob-accname" value="'+(obData.accName||"")+'" placeholder="Ej: Banco, Efectivo en mano"></div>'+
+    '<div class="form-group"><label>Tipo</label><select id="ob-acctype">'+
+    '<option value="BANK">🏦 Banco</option>'+
+    '<option value="CASH">💵 Efectivo</option>'+
+    '<option value="SAVINGS">🐷 Ahorros</option>'+
+    '<option value="DIGITAL_WALLET">📱 Billetera digital</option>'+
+    '<option value="CREDIT_CARD">💳 Tarjeta de crédito</option>'+
+    '</select></div>'+
+    '<div class="form-group"><label>\u00bfCu\u00e1nto tienes ahora? (opcional)</label><input type="number" id="ob-accbal" placeholder="Ej: 500" min="0"></div>'+
+    '<button class="btn btn-primary btn-block" onclick="obNext()">Crear cuenta \u2192</button>';
+  }
+  else if(obStep===3){
+    stepHtml =
+    '<div class="ob-icon">\uD83C\uDF89</div>'+
+    '<h2>\u00A1Listo!</h2>'+
+    '<p class="ob-desc">Ya puedes empezar a registrar tus gastos e ingresos.<br><br>Consejo r\u00e1pido: usa los botones de <strong>Gasto r\u00e1pido</strong> del panel para anotar gastos en 2 toques.</p>'+
+    '<button class="btn btn-primary btn-block" onclick="finishOnboarding()">Ir a mi panel \uD83D\uDE80</button>';
+  }
+
+  document.getElementById("app").innerHTML =
+    '<div class="auth-page"><div class="auth-card ob-card">'+
+    '<div class="ob-progress">'+progress+'</div>'+
+    '<div class="ob-step-label">Paso '+obStep+' de 3</div>'+
+    stepHtml+
+    '</div></div>';
+}
+
+function obNext(){
+  if(obStep===1){
+    var v = parseFloat(document.getElementById("ob-salary").value);
+    obData.salary = isNaN(v)?0:v;
+    var u = getCurrentUser();
+    setSalary(u.id,{amount:obData.salary});
+    obStep=2;
+  } else if(obStep===2){
+    var name = document.getElementById("ob-accname").value.trim();
+    if(!name){ alert("Escribe un nombre para tu cuenta (ej: Banco)"); return; }
+    var u = getCurrentUser();
+    var bal = parseFloat(document.getElementById("ob-accbal").value)||0;
+    var type = document.getElementById("ob-acctype").value;
+    var accs = DB.get("accounts_"+u.id);
+    accs.push({id:DB.genId(),user_id:u.id,name:name,type:type,initial_balance:bal,current_balance:bal,currency:"USD"});
+    DB.set("accounts_"+u.id,accs);
+    obStep=3;
+  }
+  showOnboarding(getCurrentUser());
+}
+
+function skipOnboarding(){
+  var u = getCurrentUser();
+  finishOnboarding();
+}
+
+function finishOnboarding(){
+  var u = getCurrentUser();
+  u.is_new = false;
+  DB.setOne("current_user", u);
+  var users = DB.get("users");
+  for(var i=0;i<users.length;i++){if(users[i].id===u.id){users[i].is_new=false;break;}}
+  DB.set("users",users);
+  currentPage = "dashboard";
+  render();
+}
+
 function showRegister(){
   document.getElementById("auth-form").innerHTML =
+    '<h2 style="font-size:20px;font-weight:700;margin-bottom:4px">Crear tu cuenta</h2>'+
+    '<p style="font-size:13px;color:var(--gray-500);margin-bottom:20px">Solo necesitas un nombre y contrase\u00f1a. Sin email de verificaci\u00f3n.</p>'+
     '<form id="reg-form">'+
-    '<div class="form-group"><label>Nombre</label><input type="text" id="rname" required></div>'+
-    '<div class="form-group"><label>Email</label><input type="email" id="remail" required></div>'+
-    '<div class="form-group"><label>Contrase\u00f1a</label><input type="password" id="rpass" minlength="6" required></div>'+
-    '<button type="submit" class="btn btn-primary btn-block">Crear Cuenta</button>'+
+    '<div class="form-group"><label>\u00bfC\u00f3mo te llamas?</label><input type="text" id="rname" placeholder="Ej: Juan" required></div>'+
+    '<div class="form-group"><label>Email</label><input type="email" id="remail" placeholder="tu@email.com" required></div>'+
+    '<div class="form-group"><label>Contrase\u00f1a (m\u00ednimo 6 caracteres)</label><input type="password" id="rpass" minlength="6" placeholder="\u2022\u2022\u2022\u2022\u2022\u2022" required></div>'+
+    '<button type="submit" class="btn btn-primary btn-block">Empezar \uD83D\uDE80</button>'+
     '</form>'+
     '<p style="text-align:center;margin-top:16px;font-size:14px;color:var(--gray-500)">\u00bfYa tienes cuenta? <a href="#" class="link" onclick="showLogin();return false">Iniciar Sesi\u00f3n</a></p>';
   document.getElementById("reg-form").onsubmit = function(e){
     e.preventDefault();
     try{
-      registerUser(document.getElementById("rname").value, document.getElementById("remail").value, document.getElementById("rpass").value);
-      render();
+      var u = registerUser(document.getElementById("rname").value.trim(), document.getElementById("remail").value.trim(), document.getElementById("rpass").value);
+      showOnboarding(u);
     } catch(err){
       document.getElementById("auth-error").innerHTML = '<div class="error">'+err.message+'</div>';
     }
@@ -965,6 +1092,11 @@ function openQuickExpenseModal(){
   var presets = getQuickExpenses(user.id);
   if(presets.length===0) presets = DEFAULT_QUICK.slice();
   var accs = DB.get("accounts_"+user.id);
+  if(accs.length===0){
+    alert("Primero crea una cuenta (banco, efectivo, etc.) para poder guardar gastos.");
+    openAccountForm();
+    return;
+  }
   var cats = DB.get("categories_"+user.id).filter(function(c){return c.type==="EXPENSE";});
 
   var accOpts = "";
@@ -1155,10 +1287,9 @@ function renderTransactions(user){
   document.getElementById("page-content").innerHTML =
     '<div class="flex-between" style="margin-bottom:24px">'+
     '<div class="flex-gap"><h1 style="font-size:24px;font-weight:700">Movimientos</h1>'+makePeriodSelector()+'</div>'+
-    '<div class="flex-gap">'+
-    '<button class="btn btn-primary btn-sm" onclick="openTxForm(\'INCOME\')">+ Nuevo Movimiento</button>'+
-    (txCount>0?'<button class="btn btn-outline btn-sm" style="color:var(--danger)" onclick="deleteAllTx()">Borrar todo</button>':'')+
-    '</div></div>'+
+    '<button class="btn btn-primary btn-sm" onclick="openTxForm()">+ Nuevo</button>'+
+    '</div>'+
+    (txCount>0?'<div class="flex-gap" style="margin-bottom:12px;justify-content:flex-end"><button class="btn-link-danger" onclick="deleteAllTx()">Vaciar lista completa</button></div>':'')+
     '<div class="card" style="margin-bottom:16px"><div class="card-body"><div class="filter-bar">'+
     '<input type="text" placeholder="Buscar..." value="'+txFilter.search+'" oninput="txFilter.search=this.value;txFilter.page=1;renderTransactions(getCurrentUser())">'+
     '<select onchange="txFilter.type=this.value;txFilter.page=1;renderTransactions(getCurrentUser())"><option value="">Todos los tipos</option><option value="INCOME" '+(txFilter.type==="INCOME"?"selected":"")+'>Ingresos</option><option value="EXPENSE" '+(txFilter.type==="EXPENSE"?"selected":"")+'>Gastos</option></select>'+
@@ -1176,49 +1307,62 @@ function openTxForm(type, existing){
   var user=getCurrentUser();
   var allCats=DB.get("categories_"+user.id);
   var accs=DB.get("accounts_"+user.id);
+  if(accs.length===0 && !existing){
+    alert("Primero crea una cuenta (banco, efectivo, etc.) para poder guardar movimientos.");
+    openAccountForm();
+    return;
+  }
   var currentType = existing ? existing.type : (type || "EXPENSE");
+  var defaultAcc = accs.length>0 ? accs[0].id : "";
 
-  var allCatOpts = '<option value="">Seleccionar categor\u00eda</option>';
+  var allCatOpts = '<option value="">Selecciona una categor\u00eda</option>';
   for(var i=0;i<allCats.length;i++){
     allCatOpts += '<option value="'+allCats[i].id+'" data-type="'+allCats[i].type+'" '+(existing && existing.category_id===allCats[i].id?"selected":"")+'>'+allCats[i].icon+" "+allCats[i].name+'</option>';
   }
-  var accOpts2 = '<option value="">Seleccionar cuenta</option>';
+  var accOpts2 = '';
   for(var j=0;j<accs.length;j++){
-    accOpts2 += '<option value="'+accs[j].id+'" '+(existing && existing.account_id===accs[j].id?"selected":"")+'>'+accs[j].name+'</option>';
+    accOpts2 += '<option value="'+accs[j].id+'" '+(existing ? existing.account_id===accs[j].id : accs[j].id===defaultAcc?"selected":"")+'>'+accs[j].name+'</option>';
   }
 
   var modal = document.createElement("div");
   modal.className = "modal-overlay";
   modal.id = "tx-modal";
   modal.innerHTML = '<div class="modal">'+
-    '<h2>'+(existing?"Editar Movimiento":"Nuevo Movimiento")+'</h2>'+
+    '<h2>'+(existing?"Editar Movimiento":"\u00BFGasto o ingreso?")+'</h2>'+
     '<form id="tx-form">'+
-    '<div class="form-group"><label>Tipo de movimiento</label>'+
-    '<div style="display:flex;gap:8px;margin-top:4px">'+
-    '<label style="display:flex;align-items:center;gap:6px;padding:8px 16px;border:2px solid '+(currentType==="INCOME"?"var(--success)":"var(--gray-300)")+';border-radius:8px;cursor:pointer;flex:1;text-align:center;justify-content:center;font-weight:600;color:'+(currentType==="INCOME"?"var(--success)":"var(--gray-500)")+';transition:all .2s">'+
-    '<input type="radio" name="tf-type" value="INCOME" '+(currentType==="INCOME"?"checked":"")+' style="display:none" onchange="onTxTypeChange(this.value)">\uD83D\uDCB0 Ingreso</label>'+
-    '<label style="display:flex;align-items:center;gap:6px;padding:8px 16px;border:2px solid '+(currentType==="EXPENSE"?"var(--danger)":"var(--gray-300)")+';border-radius:8px;cursor:pointer;flex:1;text-align:center;justify-content:center;font-weight:600;color:'+(currentType==="EXPENSE"?"var(--danger)":"var(--gray-500)")+';transition:all .2s">'+
-    '<input type="radio" name="tf-type" value="EXPENSE" '+(currentType==="EXPENSE"?"checked":"")+' style="display:none" onchange="onTxTypeChange(this.value)">\uD83D\uDCCB Gasto</label>'+
+
+    '<div class="form-group"><div class="type-toggle">'+
+    '<label class="type-opt income '+(currentType==="INCOME"?"sel":"")+'"><input type="radio" name="tf-type" value="INCOME" '+(currentType==="INCOME"?"checked":"")+' style="display:none" onchange="onTxTypeChange(this.value)">\uD83D\uDCB0 Ingreso</label>'+
+    '<label class="type-opt expense '+(currentType==="EXPENSE"?"sel":"")+'"><input type="radio" name="tf-type" value="EXPENSE" '+(currentType==="EXPENSE"?"checked":"")+' style="display:none" onchange="onTxTypeChange(this.value)">\uD83D\uDED2 Gasto</label>'+
     '</div></div>'+
-    '<div class="form-group"><label>Monto</label><input type="number" step="0.01" min="0" id="tf-amount" value="'+(existing?existing.amount:"")+'" required></div>'+
-    '<div class="form-group"><label>Descripci\u00f3n</label><input type="text" id="tf-desc" value="'+(existing?existing.description:"")+'" placeholder="Ej: Salario, Supermercado, Alquiler..." required></div>'+
+
+    '<div class="form-group"><label>\u00BFCu\u00e1nto?</label><input type="number" step="0.01" min="0" inputmode="decimal" id="tf-amount" value="'+(existing?existing.amount:"")+'" placeholder="0.00" required style="font-size:24px;font-weight:700;text-align:center;padding:14px"></div>'+
+
+    '<div class="form-group"><label>\u00BFEn qu\u00e9 categor\u00eda?</label><select id="tf-cat" required onchange="onTxCatChange()">'+allCatOpts+'</select></div>'+
+
+    '<div class="form-group" style="margin-bottom:8px"><label>Nota <span style="color:var(--gray-400);font-weight:400">(opcional)</span></label><input type="text" id="tf-desc" value="'+(existing?existing.description:"")+'" placeholder="Ej: Supermercado"></div>'+
+
+    '<button type="button" class="adv-toggle" onclick="toggleAdvanced()" id="adv-btn">\u2699\uFE0F M\u00e1s opciones \u25BE</button>'+
+    '<div id="tf-advanced" style="display:none;border-top:1px dashed var(--gray-200);padding-top:16px;margin-top:12px">'+
     '<div class="form-group"><label>Fecha</label><input type="date" id="tf-date" value="'+(existing?existing.date:new Date().toISOString().split("T")[0])+'" required></div>'+
-    '<div class="form-group"><label>Categor\u00eda</label><select id="tf-cat" required onchange="onTxCatChange()">'+allCatOpts+'</select></div>'+
-    '<div class="form-group"><label>Cuenta / Medio de pago</label><select id="tf-acc" required>'+accOpts2+'</select></div>'+
-    '<div class="form-group"><label>Clasificaci\u00f3n</label><select id="tf-class">'+
-    '<option value="NECESSARY" '+(existing&&existing.classification==="NECESSARY"?"selected":"")+'>\uD83D\uDEE1\uFE0F Necesario</option>'+
-    '<option value="DISCRETIONARY" '+(existing&&existing.classification==="DISCRETIONARY"?"selected":"")+'>\uD83C\uDFAC Discrecional</option>'+
-    '<option value="BUSINESS" '+(existing&&existing.classification==="BUSINESS"?"selected":"")+'>\uD83C\uDFE2 Negocio</option>'+
-    '<option value="SAVING" '+(existing&&existing.classification==="SAVING"?"selected":"")+'>\uD83C\uDFE0 Ahorro</option>'+
+    '<div class="form-group"><label>Cuenta / Medio de pago</label><select id="tf-acc">'+accOpts2+'</select></div>'+
+    '<div class="form-group"><label>Es un gasto...</label><select id="tf-class">'+
+    '<option value="NECESSARY" '+(existing&&existing.classification==="NECESSARY"?"selected":"")+'>\uD83D\uDEE1\uFE0F Necesario (no lo puedo evitar)</option>'+
+    '<option value="DISCRETIONARY" '+(existing&&existing.classification==="DISCRETIONARY"?"selected":"")+'>\uD83C\uDFAF A gusto m\u00edo (podr\u00eda evitarlo)</option>'+
+    '<option value="SAVING" '+(existing&&existing.classification==="SAVING"?"selected":"")+'>\uD83D\uDCB0 Ahorro</option>'+
+    '<option value="BUSINESS" '+(existing&&existing.classification==="BUSINESS"?"selected":"")+'>\uD83C\uDFE2 De mi negocio</option>'+
     '</select></div>'+
-    '<div class="form-group"><label>Responsabilidad</label><select id="tf-biz">'+
-    '<option value="PERSONAL" '+(existing&&existing.is_business==="PERSONAL"?"selected":"")+'>\uD83D\uDC64 Personal</option>'+
-    '<option value="BUSINESS" '+(existing&&existing.is_business==="BUSINESS"?"selected":"")+'>\uD83C\uDFE2 Negocio</option>'+
-    '</select></div>'+
-    '<div class="form-group"><label><input type="checkbox" id="tf-recurring" '+(existing&&existing.is_recurring?"checked":"")+'> Gasto/Ingreso recurrente (fijo mensual)</label></div>'+
-    '<div class="modal-actions"><button type="submit" class="btn btn-primary">\uD83D\uDCBE Guardar</button><button type="button" class="btn btn-outline" onclick="document.getElementById(\'tx-modal\').remove()">Cancelar</button></div>'+
+    '<div class="form-group"><label><input type="checkbox" id="tf-recurring" '+(existing&&existing.is_recurring?"checked":"")+'> Se repite todos los meses (fijo)</label></div>'+
+    '</div>'+
+
+    '<div class="modal-actions"><button type="submit" class="btn btn-primary btn-block">\u2705 Guardar</button></div>'+
+    '<button type="button" class="btn-link" onclick="document.getElementById(\'tx-modal\').remove()">Cancelar</button>'+
     '</form></div>';
   document.body.appendChild(modal);
+  if(!existing){
+    var amtEl=document.getElementById("tf-amount");
+    setTimeout(function(){amtEl.focus();},150);
+  }
 
   document.getElementById("tx-form").onsubmit=function(e){
     e.preventDefault();
@@ -1226,16 +1370,19 @@ function openTxForm(type, existing){
     var txs=DB.get("transactions_"+user.id);
     var selType = document.querySelector('input[name="tf-type"]:checked');
     var finalType = selType ? selType.value : currentType;
+    var descVal = document.getElementById("tf-desc").value.trim();
+    var catSel = document.getElementById("tf-cat");
+    var catName = catSel.options[catSel.selectedIndex] ? catSel.options[catSel.selectedIndex].text.replace(/^\S+\s/,"") : "";
     var data={
       type:finalType,
       amount:parseFloat(document.getElementById("tf-amount").value),
-      description:document.getElementById("tf-desc").value,
+      description:descVal||catName||((finalType==="INCOME")?"Ingreso":"Gasto"),
       date:document.getElementById("tf-date").value,
-      category_id:document.getElementById("tf-cat").value,
+      category_id:catSel.value,
       account_id:document.getElementById("tf-acc").value,
       classification:document.getElementById("tf-class").value,
       is_recurring:document.getElementById("tf-recurring").checked,
-      is_business:document.getElementById("tf-biz").value
+      is_business:"PERSONAL"
     };
     if(existing){
       for(var i=0;i<txs.length;i++){
@@ -1257,16 +1404,23 @@ function openTxForm(type, existing){
   onTxTypeChange(currentType);
 }
 
-function onTxTypeChange(type){
-  var labels = document.querySelectorAll("#tx-modal label[style]");
-  for(var i=0;i<labels.length;i++){
-    if(labels[i].querySelector('input[name="tf-type"]')){
-      var input = labels[i].querySelector('input[name="tf-type"]');
-      var isActive = input.value === type;
-      labels[i].style.borderColor = isActive ? (type==="INCOME"?"var(--success)":"var(--danger)") : "var(--gray-300)";
-      labels[i].style.color = isActive ? (type==="INCOME"?"var(--success)":"var(--danger)") : "var(--gray-500)";
-    }
+function toggleAdvanced(){
+  var adv=document.getElementById("tf-advanced");
+  var btn=document.getElementById("adv-btn");
+  if(adv.style.display==="none"){
+    adv.style.display="block";
+    btn.innerHTML="\u2699\uFE0F Menos opciones \u25B4";
+  } else {
+    adv.style.display="none";
+    btn.innerHTML="\u2699\uFE0F M\u00e1s opciones \u25BE";
   }
+}
+
+function onTxTypeChange(type){
+  var incLabel=document.querySelector('.type-opt.income');
+  var expLabel=document.querySelector('.type-opt.expense');
+  if(incLabel) incLabel.classList.toggle("sel",type==="INCOME");
+  if(expLabel) expLabel.classList.toggle("sel",type==="EXPENSE");
   var catSelect = document.getElementById("tf-cat");
   if(!catSelect) return;
   var selectedVal = catSelect.value;
@@ -1316,7 +1470,8 @@ function deleteTx(id){
   renderPage(user);
 }
 function deleteAllTx(){
-  if(!confirm("\u00bfEliminar TODOS los movimientos? Esta acci\u00f3n no se puede deshacer.")) return;
+  if(!confirm("\u00bfVaciar TODA la lista de movimientos?")) return;
+  if(!confirm("\u00BFEst\u00e1s seguro? Se borrar\u00e1n todos los movimientos y no se puede deshacer.")) return;
   var user=getCurrentUser();
   DB.set("transactions_"+user.id, []);
   recalcBalances(user.id);
